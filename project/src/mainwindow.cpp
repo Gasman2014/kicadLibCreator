@@ -14,7 +14,9 @@
 #include <QDesktopServices>
 #include <QCompleter>
 #include <assert.h>
+#include <QCryptographicHash>
 #include "textfile.h"
+#include "designsettings.h"
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
@@ -102,6 +104,7 @@ void MainWindow::on_pushButton_clicked() {
         QTableWidgetItem *newDescription = new QTableWidgetItem(queryResults[i].description);
         QTableWidgetItem *newExtras = new QTableWidgetItem("");
         QTableWidgetItem *newOctopartURL = new QTableWidgetItem("link");
+        QTableWidgetItem *newProductURL = new QTableWidgetItem("");
         newOctopartURL->setData(Qt::UserRole,queryResults[i].urlOctoPart);
         newMPNItem->setData(Qt::UserRole,i);
         QString categorie_str;
@@ -122,6 +125,12 @@ void MainWindow::on_pushButton_clicked() {
         }else{
             ds += "3DModel: yes";
         }
+        if (queryResults[i].urlProduct.count()){
+            newProductURL->setText("link");
+        }else{
+            newProductURL->setText("no link");
+        }
+
         newExtras->setText(ds);
         newCategorie->setText(categorie_str);
         ui->tableOctopartResult->setItem(i,0,newMPNItem);
@@ -131,6 +140,7 @@ void MainWindow::on_pushButton_clicked() {
         ui->tableOctopartResult->setItem(i,4,newCategorie);
         ui->tableOctopartResult->setItem(i,5,newExtras);
         ui->tableOctopartResult->setItem(i,6,newOctopartURL);
+        ui->tableOctopartResult->setItem(i,7,newProductURL);
 
     }
     ui->tableOctopartResult->resizeColumnsToContents();
@@ -138,16 +148,33 @@ void MainWindow::on_pushButton_clicked() {
     //octopartInterface.sendOctoPartRequest("SN74S74N");
 
 }
+void MainWindow::openHttpLink(QString url)
+{
+    if (url.count()){
+        ui->statusBar->showMessage("Open Browser..", 2000);
+        QDesktopServices::openUrl(QUrl(url));
+    }
+}
+
+void MainWindow::tableOctopartResult_linkclicked(int row, int column)
+{
+    if (column == 6){
+        if (row < queryResults.count()){
+            openHttpLink(queryResults[row].urlOctoPart);
+        }
+    }else if(column == 7){
+        if (row < queryResults.count()){
+            openHttpLink(queryResults[row].urlProduct);
+        }
+    }
+}
 
 
 
 void MainWindow::on_tableOctopartResult_cellDoubleClicked(int row, int column)
 {
-    if (column == 6){
-        if (row < queryResults.count()){
-            ui->statusBar->showMessage("Open Browser..", 2000);
-            QDesktopServices::openUrl(QUrl(queryResults[row].urlOctoPart));
-        }
+    if (column >= 6){
+        tableOctopartResult_linkclicked(row,column);
     }else{
         ui->tabWidget->setCurrentIndex(1);
     }
@@ -155,14 +182,14 @@ void MainWindow::on_tableOctopartResult_cellDoubleClicked(int row, int column)
 
 void MainWindow::on_tableOctopartResult_cellClicked(int row, int column)
 {
-    if (column == 6){
-        if (row < queryResults.count()){
-            ui->statusBar->showMessage("Open Browser..", 2000);
-            QDesktopServices::openUrl(QUrl(queryResults[row].urlOctoPart));
-        }
-    }
+    tableOctopartResult_linkclicked(row,column);
+
 }
 
+void MainWindow::on_lbl_productlink_linkActivated(const QString &link)
+{
+    openHttpLink(link);
+}
 
 void MainWindow::on_tableOctopartResult_cellActivated(int row, int column)
 {
@@ -200,9 +227,9 @@ void MainWindow::resetSearchQuery(bool resetAlsoTable)
     if (resetAlsoTable){
         ui->tableOctopartResult->clear();
         ui->tableOctopartResult->setRowCount(0);
-        ui->tableOctopartResult->setColumnCount(7);
+        ui->tableOctopartResult->setColumnCount(8);
         QStringList hHeader;
-        hHeader << "MPN" << "Manufacturer" << "Description" << "Footprint" << "Categories" << "Extras" << "Octopart";
+        hHeader << "MPN" << "Manufacturer" << "Description" << "Footprint" << "Categories" << "Extras" << "Octopart" << "Product";
         ui->tableOctopartResult->setHorizontalHeaderLabels(hHeader);
         queryResults.clear();
     }
@@ -257,7 +284,7 @@ void MainWindow::on_tabWidget_currentChanged(int index)
 #endif
         if (selectedOctopartMPN.getMpn() == ""){
             ui->tabWidget->setCurrentIndex(0);
-            ui->statusBar->showMessage("Please select a part from Octopart query first (1)", 2000);
+            ui->statusBar->showMessage("Please select a part from Octopart query first", 2000);
         }else{
             ui->lbl_sourceOctopart->setText("Selected Octopart MPN: "+selectedOctopartMPN.getMpn());
             querymemory.addQuery(selectedOctopartMPN.getMpn());
@@ -311,6 +338,8 @@ void MainWindow::on_tabWidget_currentChanged(int index)
                 ui->cmb_targetFootprint->addItems(fpLib.getFootprintList());
                 ui->lblSourceDevice->setText(currentSourceLib.getName()+"/"+currentSourceDevice.def.name);
 
+                ui->lbl_productlink->setText("<a href=\""+selectedOctopartMPN.urlProduct+"\">link</a>");
+                ui->lbl_productlink->setVisible(selectedOctopartMPN.urlProduct.count() > 0);
                 QStringList targetLibList;
                 ui->cmb_targetLibrary->clear();
                 QDirIterator it(libCreatorSettings.path_targetLibrary, QDirIterator::NoIteratorFlags);
@@ -327,6 +356,14 @@ void MainWindow::on_tabWidget_currentChanged(int index)
                     ui->cmb_targetLibrary->addItem(fi.fileName());
                 }
 
+
+                if (ui->cmb_targetRuleName->currentText().count()==0){
+                    QList<PartCreationRule> possibleRules = partCreationRuleList.findRuleByCategoryID(selectedOctopartMPN.categories);
+                    for (auto possibleRule : possibleRules){
+                        ui->cmb_targetRuleName->setCurrentText(possibleRule.name);
+                        break;
+                    }
+                }
                 loadRuleCombobox();
                 on_btn_applyRule_clicked();
             }
@@ -334,13 +371,12 @@ void MainWindow::on_tabWidget_currentChanged(int index)
     }
 }
 
+
 void  MainWindow::loadRuleCombobox(){
     QString selectedRule = ui->cmb_targetRuleName->currentText();
     ui->cmb_targetRuleName->clear();
     ui->cmb_targetRuleName->addItems(partCreationRuleList.namesWithoutGlobal);
     ui->cmb_targetRuleName->setCurrentText(selectedRule);
-
-
 }
 
 
@@ -423,87 +459,112 @@ void MainWindow::showDatasheet()
 {
     QString targetpath = getDataSheetFileName(false);
     QString url = "file:///"+targetpath;
+#ifdef Q_OS_WIN32
+    if (libCreatorSettings.useHashAsDatasheetFilename){
+        url += ".lnk";
+    }
+#endif
     if (QDesktopServices::openUrl(QUrl(url))==false){
         ui->statusBar->showMessage("Could not open file with default brower: "+url,5000);
     }
 }
 
+void loadFieldDesign(KICADLibSchematicDeviceField &deviceField,  const LibCreatorSettings &settings){
+    const QList<FieldDesignSettingsItem> fieldDesigns = settings.fieldDesigns;
+    int designIndex = deviceField.fieldIndex.getRawIndex();
+    if (designIndex < fieldDesigns.count()){
+        FieldDesignSettingsItem item = fieldDesigns[designIndex];
+        deviceField.setDesign(item,settings.fieldDesign_overwriteTextPosition);
+    }
+}
 
-
-void MainWindow::setCurrentDevicePropertiesFromGui()
+KICADLibSchematicDevice MainWindow::createDevicePropertiesFromGui( KICADLibSchematicDevice &sourceDevice, QString realDatasheetPath)
 {
+    KICADLibSchematicDevice result = sourceDevice;
     KICADLibSchematicDeviceField deviceField;
 
+    KICADLibSchematicDeviceField deviceField_reference = sourceDevice.fields.getFieldbyIndex(0);
+    KICADLibSchematicDeviceField deviceField_value = sourceDevice.fields.getFieldbyIndex(1);
+
     deviceField.clear();
-    deviceField.name = "key";
-    deviceField.text = ui->edt_targetID->text();//QUuid::createUuid().toByteArray().toHex();
-    deviceField.visible = false;
-    deviceField.fieldIndex.setRawIndex(4);
-    currentSourceDevice.fields.setField(deviceField);
+    deviceField = deviceField_reference;
+    deviceField.text = ui->edt_targetDesignator->text().trimmed();
+    deviceField.name = "";
+    deviceField.fieldIndex.setRawIndex(0);
+    loadFieldDesign(deviceField,libCreatorSettings);
+    result.fields.setField(deviceField);
+
+    deviceField.clear();
+    deviceField.name = "";
+    deviceField.text = ui->edt_targetName->text().trimmed();
+    deviceField.text =  deviceField.text.replace(" ","_");
+    result.def.name = deviceField.text;
+    deviceField.fieldIndex.setRawIndex(1);
+    loadFieldDesign(deviceField,libCreatorSettings);
+    result.fields.setField(deviceField);
 
     deviceField.clear();
     deviceField.name = "footprint";
-    deviceField.text = ui->cmb_targetFootprint->currentText();
-    deviceField.visible = false;
+    deviceField.text = ui->cmb_targetFootprint->currentText().trimmed();
     deviceField.fieldIndex.setRawIndex(2);
-    currentSourceDevice.fields.setField(deviceField);
+    loadFieldDesign(deviceField,libCreatorSettings);
+    result.fields.setField(deviceField);
 
     deviceField.clear();
     deviceField.name = "datasheet";
 
-    deviceField.text = getDataSheetFileName(true);
-    deviceField.visible = false;
+    if (libCreatorSettings.useAbsolutePathForDatasheetField){
+        deviceField.text = realDatasheetPath;
+    }else{
+        QDir d(libCreatorSettings.path_datasheet);
+        deviceField.text = d.relativeFilePath(realDatasheetPath);
+        qDebug() << deviceField.text;
+    }
     deviceField.fieldIndex.setRawIndex(3);
-    currentSourceDevice.fields.setField(deviceField);
+    loadFieldDesign(deviceField,libCreatorSettings);
+    result.fields.setField(deviceField);
+
+    deviceField.clear();
+    deviceField.fieldIndex.setRawIndex(4);
+    deviceField.name = "key";
+    deviceField.text = ui->edt_targetID->text().trimmed();//QUuid::Uuid().toByteArray().toHex();
+    loadFieldDesign(deviceField,libCreatorSettings);
+    result.fields.setField(deviceField);
 
     deviceField.clear();
     deviceField.name = "mpn";
-    deviceField.text = ui->edt_targetMPN->text();
-    deviceField.visible = false;
+    deviceField.text = ui->edt_targetMPN->text().trimmed();
     deviceField.fieldIndex.setRawIndex(5);
-    currentSourceDevice.fields.setField(deviceField);
+    loadFieldDesign(deviceField,libCreatorSettings);
+    result.fields.setField(deviceField);
 
     deviceField.clear();
     deviceField.name = "manufacturer";
-    deviceField.text = ui->edt_targetManufacturer->text();
-    deviceField.visible = false;
+    deviceField.text = ui->edt_targetManufacturer->text().trimmed();
     deviceField.fieldIndex.setRawIndex(6);
-    currentSourceDevice.fields.setField(deviceField);
+    loadFieldDesign(deviceField,libCreatorSettings);
+    result.fields.setField(deviceField);
 
 
     deviceField.clear();
-    deviceField = currentSourceDevice.fields.getFieldbyIndex(0);
-    deviceField.text = ui->edt_targetDesignator->text();
-    deviceField.name = "";
-    deviceField.fieldIndex.setRawIndex(0);
-    currentSourceDevice.fields.setField(deviceField);
-
-
-    deviceField.clear();
-    deviceField = currentSourceDevice.fields.getFieldbyIndex(1); //lets copy value field and replace it optically by disp value
+    deviceField = deviceField_value;
     deviceField.name = "DisplayValue";
-    deviceField.text = ui->edt_targetDisplayValue->text();
-    deviceField.visible = true;
+    deviceField.text = ui->edt_targetDisplayValue->text().trimmed();
     deviceField.fieldIndex.setRawIndex(7);
-    currentSourceDevice.fields.setField(deviceField);
+    loadFieldDesign(deviceField,libCreatorSettings);
+    result.fields.setField(deviceField);
 
+    result.fields.removeAllAboveIndex(8);
+    result.fpList.clear();//we want our own footprints..
 
-    deviceField.clear();
-    deviceField = currentSourceDevice.fields.getFieldbyIndex(1);
-    deviceField.name = "";
-    deviceField.text = ui->edt_targetMPN->text();
-    deviceField.visible = false;
-    deviceField.fieldIndex.setRawIndex(1);
-    currentSourceDevice.fields.setField(deviceField);
-
-    currentSourceDevice.fields.removeAllAboveIndex(8);
-
-
-    currentSourceDevice.fpList.clear();//we want our own footprints..
-
-    currentSourceDevice.dcmEntry.description = ui->edt_targetDescription->text();
-    currentSourceDevice.def.reference =  ui->edt_targetDesignator->text();
-    currentSourceDevice.def.name = ui->edt_targetMPN->text();
+    result.dcmEntry.description = ui->edt_targetDescription->text();
+    result.def.reference =  ui->edt_targetDesignator->text();
+    if (libCreatorSettings.fieldDesign_overwritePinSettings){
+        result.def.drawPinName = libCreatorSettings.def_draw_pin_name;
+        result.def.drawPinNumber = libCreatorSettings.def_draw_pin_number;
+        result.def.text_offset = libCreatorSettings.def_text_offset;
+    }
+    return result;
 }
 
 QString MainWindow::cleanUpFileNameNode(QString filename,bool allowSeparatorLikeChars){
@@ -523,6 +584,7 @@ QString MainWindow::cleanUpFileNameNode(QString filename,bool allowSeparatorLike
         filename[1] = second_char;
     }
     filename = filename.replace(";","_");
+    filename = filename.replace("#","_");
     filename = filename.replace(",","_");
     filename = filename.replace("?","_");
     filename = filename.replace("*","_");
@@ -539,26 +601,33 @@ QString MainWindow::cleanUpFileNameNode(QString filename,bool allowSeparatorLike
     return filename;
 }
 
-QString MainWindow::cleanUpFileName(QString filename)
+QString MainWindow::cleanUpAndJoinFileName(QString filename_root, QString filename_relative)
 {
     QString result;
-    result = cleanUpFileNameNode(filename,true);
+    result = cleanUpFileNameNode(filename_relative,true);
+    if (filename_root.count()){
+        result = filename_root+QDir::separator()+result;
+    }
     result = result.replace(QString(QDir::separator())+QDir::separator(),QDir::separator());
     return result;
 }
 
 
 
+
+
 QString MainWindow::getDataSheetFileName(bool relativePath){
 
-    QString targetpath=libCreatorSettings.path_datasheet+QDir::separator();
+    QString targetpath;
+    QString targetpath_root;
+    targetpath = ui->edt_targetDatasheet->text();
     if (relativePath){
-        targetpath = ui->edt_targetDatasheet->text();
+        targetpath_root = "";
     }else{
-        targetpath=libCreatorSettings.path_datasheet+QDir::separator()+ui->edt_targetDatasheet->text();
+        targetpath_root = libCreatorSettings.path_datasheet;
     }
 
-    targetpath = cleanUpFileName(targetpath);
+    targetpath = cleanUpAndJoinFileName(targetpath_root, targetpath);
     return targetpath;
 }
 
@@ -587,28 +656,61 @@ QString MainWindow::downloadDatasheet(bool force){
 
     }
     QString p = fi.absolutePath();
-    if ((force || !fi.exists()) && proceed ){
+    QString datasheetSavePath = targetpath;
+
+
+
+
+    if ((force || !fi.exists() || libCreatorSettings.useHashAsDatasheetFilename) && proceed ){
         ui->pushButton_3->setText("downloading..");
+
         QDir().mkpath(p);
         restRequester.startRequest(selectedOctopartMPN.urlDataSheet,params,&buf);
-        QFile file(targetpath);
+
+        if (libCreatorSettings.useHashAsDatasheetFilename){
+            QCryptographicHash hash(QCryptographicHash::Md5);
+            buf.open(QIODevice::ReadOnly);
+            hash.addData(buf.readAll());
+            buf.close();
+            QByteArray hashresult = hash.result();
+            QString hash_str = hashresult.toHex();
+            datasheetSavePath = fi.absolutePath()+QDir::separator()+hash_str+"."+fi.suffix();
+        }
+        QFile file(datasheetSavePath);
         ui->pushButton_3->setText("download and show");
 
         if (file.open(QIODevice::WriteOnly)){
             buf.open(QIODevice::ReadOnly);
             file.write(buf.readAll());
+            if (libCreatorSettings.useHashAsDatasheetFilename){
+
+                QString linksuffix="";
+            #ifdef Q_OS_WIN32
+                linksuffix = ".lnk";
+            #endif
+                if (!file.link(targetpath+linksuffix)){
+                    ui->statusBar->showMessage("couldnt  link "+targetpath+linksuffix,5000);
+                }
+            }
             file.close();
-            ui->statusBar->showMessage("saved datasheet to "+targetpath,5000);
+            ui->statusBar->showMessage("saved datasheet to "+datasheetSavePath,5000);
+
         }else{
-            ui->statusBar->showMessage("couldnt open file "+targetpath,5000);
-            qDebug() << "couldnt open file "+targetpath;
-            targetpath = "";
+            ui->statusBar->showMessage("couldnt open file "+datasheetSavePath,5000);
+            qDebug() << "couldnt open file "+datasheetSavePath;
+            datasheetSavePath = "";
         }
+
     }else{
-        targetpath = "";
+        if (proceed == false){
+            datasheetSavePath = "";
+        }else{
+
+        }
+
     }
     setDatasheetButton();
-    return targetpath;
+    return datasheetSavePath;
 }
 
 
@@ -644,21 +746,30 @@ void MainWindow::on_pushButton_3_clicked()
 
 void MainWindow::on_btnCreatePart_clicked()
 {
+    QString realDatasheetPath = downloadDatasheet(false);
+
     KICADLibSchematicDeviceLibrary targetLib;
-    setCurrentDevicePropertiesFromGui();
-    QFileInfo fi(ui->cmb_targetLibrary->currentText());
-    QString targetLibName;
-    if (fi.suffix() == "lib"){
-        targetLibName= libCreatorSettings.path_targetLibrary+QDir::separator()+ui->cmb_targetLibrary->currentText();
-    }else{
-        targetLibName= libCreatorSettings.path_targetLibrary+QDir::separator()+ui->cmb_targetLibrary->currentText()+".lib";
+    KICADLibSchematicDevice deviceToBeCreated = createDevicePropertiesFromGui(currentSourceDevice,realDatasheetPath);
+
+    QString targetLibName  = ui->cmb_targetLibrary->currentText().trimmed();
+    if (targetLibName.count()==0){
+        QMessageBox::critical(this,"Empty library name","Please specify a library name.");
+        return;
     }
-    targetLibName = cleanUpFileName(targetLibName);
-    downloadDatasheet(false);
-    if (currentSourceDevice.isValid()){
+
+    QFileInfo fi(targetLibName);
+
+    if (fi.suffix() == "lib"){
+        targetLibName= targetLibName;
+    }else{
+        targetLibName= targetLibName+".lib";
+    }
+    targetLibName = cleanUpAndJoinFileName(libCreatorSettings.path_targetLibrary,targetLibName);
+
+    if (deviceToBeCreated.isValid()){
         targetLib.loadFile(targetLibName);
         bool proceed = true;
-        if (targetLib.indexOf(currentSourceDevice.def.name)>-1){
+        if (targetLib.indexOf(deviceToBeCreated.def.name)>-1){
             QMessageBox msgBox;
             msgBox.setText("Part duplicate");
             msgBox.setInformativeText("A part with this name already exists. Overwrite old part?");
@@ -668,9 +779,9 @@ void MainWindow::on_btnCreatePart_clicked()
         }
         if(proceed){
 
-            targetLib.insertDevice(currentSourceDevice);
+            targetLib.insertDevice(deviceToBeCreated);
             if (targetLib.saveFile(targetLibName)){
-                ui->statusBar->showMessage("Inserted part "+currentSourceDevice.def.name+" to library: \""+targetLibName+"\"",10000);
+                ui->statusBar->showMessage("Inserted part "+deviceToBeCreated.def.name+" to library: \""+targetLibName+"\"",10000);
             }else{
                 ui->statusBar->showMessage("Could not save library \""+targetLibName+"\"",10000);
             }
@@ -701,27 +812,29 @@ void MainWindow::on_cmb_targetFootprint_currentTextChanged(const QString &arg1)
     }
 }
 
+void insertStandVariableValue(QMap<QString, QString> &variables, QString name, QString value, bool allowEmptyValue){
+    if (value.count() || allowEmptyValue){
+        if ((value != "example") || (!variables.contains(name))){
+            variables.insert(name,value);
+        }
+    }
+}
 
 void MainWindow::insertStandardVariablesToMap(QMap<QString, QString> &variables, QString footprint, QString reference, QString ruleName, QString mpn,
-                                              QString manufacturer, QString description, QString OctoFootprint ){
-    if (footprint.count()){
-        variables.insert("%source.footprint%",footprint);
-    }
-    if (reference.count()){
-        variables.insert("%source.ref%",reference);
-    }
-    if (ruleName.count()){
-        variables.insert("%rule.name%",ruleName);
-        variables.insert("%rule.name.saveFilename%",cleanUpFileNameNode(ruleName,false));
-    }
-    variables.insert("%octo.mpn%",mpn);
-    variables.insert("%octo.manufacturer%",manufacturer);
-    variables.insert("%octo.description%",description);
-    variables.insert("%octo.footprint%",OctoFootprint);
+                                              QString manufacturer, QString description, QString OctoFootprint, QString OctoFootprintMetric_IPC){
+    insertStandVariableValue(variables,"%source.footprint%",footprint,false);
+    insertStandVariableValue(variables,"%source.ref%",reference,false);
+    insertStandVariableValue(variables,"%rule.name%",ruleName,false);
+    insertStandVariableValue(variables,"%rule.name.saveFilename%",cleanUpFileNameNode(ruleName,false),false);
 
-    variables.insert("%octo.mpn.saveFilename%",cleanUpFileNameNode(mpn,false));
-    variables.insert("%octo.manufacturer.saveFilename%",cleanUpFileNameNode(manufacturer,false));
+    insertStandVariableValue(variables,"%octo.mpn%",mpn,true);
+    insertStandVariableValue(variables,"%octo.manufacturer%",manufacturer,true);
+    insertStandVariableValue(variables,"%octo.description%",description,true);
+    insertStandVariableValue(variables,"%octo.footprint%",OctoFootprint,true);
+    insertStandVariableValue(variables,"%octo.metric-ipc-footprint%",OctoFootprintMetric_IPC,true);
 
+    insertStandVariableValue(variables,"%octo.mpn.saveFilename%",cleanUpFileNameNode(mpn,false),true);
+    insertStandVariableValue(variables,"%octo.manufacturer.saveFilename%",cleanUpFileNameNode(manufacturer,false),true);
 
     variables.insert("%target.id%",QString::number(QDateTime::currentMSecsSinceEpoch()));
 }
@@ -736,11 +849,58 @@ QMap<QString, QString> MainWindow::createVariableMap(){
     QString manufacturer = selectedOctopartMPN.manufacturer;
     QString description = selectedOctopartMPN.description;
     QString OctoFootprint = selectedOctopartMPN.footprint;
+    QString OctoFootprintMetric_IPC = selectedOctopartMPN.footprint;
     if (fp.count()){
        footprint = currentSourceDevice.fields.getFieldbyIndex(3).text;
     }
 
-    insertStandardVariablesToMap(variables, footprint,reference,ruleName, mpn, manufacturer,description, OctoFootprint );
+    if (OctoFootprintMetric_IPC == "01005"){
+        OctoFootprintMetric_IPC = "0402";
+    }else if (OctoFootprintMetric_IPC == "0201"){
+        OctoFootprintMetric_IPC = "0603";
+    }else if (OctoFootprintMetric_IPC == "0402"){
+        OctoFootprintMetric_IPC = "1005";
+    }else if (OctoFootprintMetric_IPC == "0603"){
+        OctoFootprintMetric_IPC = "1608";
+    }else if (OctoFootprintMetric_IPC == "0805"){
+        OctoFootprintMetric_IPC = "2012";
+    }else if (OctoFootprintMetric_IPC == "1008"){
+        OctoFootprintMetric_IPC = "2520";
+    }else if (OctoFootprintMetric_IPC == "1206"){
+        OctoFootprintMetric_IPC = "3216";
+    }else if (OctoFootprintMetric_IPC == "1210"){
+        OctoFootprintMetric_IPC = "3225";
+    }else if (OctoFootprintMetric_IPC == "1806"){
+        OctoFootprintMetric_IPC = "4516";
+    }else if (OctoFootprintMetric_IPC == "1812"){
+        OctoFootprintMetric_IPC = "4532";
+    }else if (OctoFootprintMetric_IPC == "2010"){
+        OctoFootprintMetric_IPC = "5025";
+    }else if (OctoFootprintMetric_IPC == "2512"){
+        OctoFootprintMetric_IPC = "6332";
+    }else if (OctoFootprintMetric_IPC == "TSSOP"){
+            OctoFootprintMetric_IPC = "SOP";
+    }else if (OctoFootprintMetric_IPC == "TSOP"){
+        OctoFootprintMetric_IPC = "SOP";
+    }else if (OctoFootprintMetric_IPC == "PSOP"){
+        OctoFootprintMetric_IPC = "SOP";
+    }else if (OctoFootprintMetric_IPC == "SSOP"){
+        OctoFootprintMetric_IPC = "SOP";
+    }else if (OctoFootprintMetric_IPC == "QSOP"){
+        OctoFootprintMetric_IPC = "SOP";
+    }else if (OctoFootprintMetric_IPC == "VSOP"){
+        OctoFootprintMetric_IPC = "SOP";
+    }else if (OctoFootprintMetric_IPC == "SMB"){
+        OctoFootprintMetric_IPC = "DIOM5336X240";
+    }else if (OctoFootprintMetric_IPC == "SMC"){
+        OctoFootprintMetric_IPC = "DIOM7959X241";
+    }else if (OctoFootprintMetric_IPC == "SMA"){
+        OctoFootprintMetric_IPC = "DIOM5025X231";
+    }
+
+
+
+    insertStandardVariablesToMap(variables, footprint,reference,ruleName, mpn, manufacturer,description, OctoFootprint, OctoFootprintMetric_IPC );
 
 
     return variables;
@@ -791,7 +951,6 @@ void MainWindow::on_btn_editRule_clicked()
 
 void MainWindow::on_btn_applyRule_clicked()
 {
-    targetDevice = currentSourceDevice;
     PartCreationRule currentRule =  partCreationRuleList.getRuleByNameForAppliaction(ui->cmb_targetRuleName->currentText());
 
   //  if (currentRule.name != "")
@@ -824,9 +983,7 @@ void MainWindow::oncmbOctoQueryEnterPressed()
 
 void MainWindow::setDatasheetButton()
 {
-   // QString targetpath = getDataSheetFileName(false);
-   // QFileInfo fi(targetpath);
-   // ui->btn_show_datasheet->setEnabled(fi.exists());
+
 }
 
 
@@ -853,11 +1010,11 @@ void MainWindow::on_actionOptions_triggered()
 
 
 
+void MainWindow::on_actionDesign_settings_triggered()
+{
+    DesignSettings diag(libCreatorSettings,this);
+    diag.exec();
 
-
-
-
-
-
+}
 
 

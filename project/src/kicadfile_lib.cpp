@@ -267,6 +267,21 @@ void KICADLibSchematicDeviceField::clear()
     name = "";
 }
 
+void KICADLibSchematicDeviceField::setDesign(FieldDesignSettingsItem designItem, bool overwriteTextPosition)
+{
+    if (overwriteTextPosition){
+        position = designItem.position;
+        hjustify = designItem.hjustify;
+        vjustify = designItem.vjustify;
+        orientation = designItem.orientation;
+    }
+    dimension = designItem.dimension;
+    visible = designItem.visible;
+
+    FontstyleItalic = designItem.FontstyleItalic;
+    FontstyleBold = designItem.FontstyleBold;
+}
+
 bool KICADLibSchematicDeviceField::operator<(const KICADLibSchematicDeviceField &R) const
 {
 
@@ -436,9 +451,14 @@ void KICADLibSchematicDeviceLibrary::loadFile(QString fileName)
                 section=SECTION::none;
                 bool ok = false;
                 QString nextName=libDevice.def.name;
-
                 libDevice.dcmEntry = dcmFile.getEntryByName(nextName,ok);
-
+                if (libDevice.dcmEntry.name == ""){
+                    QString nextName=libDevice.def.name;
+                    if (nextName[0]== '~' ){
+                        nextName = nextName.mid(1);
+                    }
+                    libDevice.dcmEntry = dcmFile.getEntryByName(nextName,ok);
+                }
                // qDebug() << libDevice.dcmEntry.description;
                 symbolList.append(libDevice);
             }
@@ -491,7 +511,11 @@ bool KICADLibSchematicDeviceLibrary::saveFile(QString fileName)
             ts << "ENDDEF"<< endl;;
 
             if(symbolList[i].dcmEntry.hasFields()){
-                dcms << "$CMP "+symbolList[i].def.name<< endl;
+                QString dcmName=symbolList[i].def.name;
+                if (dcmName[0]== '~' ){
+                    dcmName = dcmName.mid(1);
+                }
+                dcms << "$CMP "+dcmName<< endl;
                 if (symbolList[i].dcmEntry.description.count()){
                     dcms << "D "<< symbolList[i].dcmEntry.description << endl;
                 }
@@ -563,11 +587,11 @@ bool KICADLibSchematicDevice::isValid()
         result = false;
     }
 
-
+#if 0
     if(drawSymbols.count()==0){
         result = false;
     }
-
+#endif
 
     if(def.isValid()==false){
         result = false;
@@ -582,6 +606,7 @@ KICADLibSchematicDeviceField KicadFieldList::getFieldbyIndex(int index)
 
     for(int i=0;i< fields.count();i++){
         if (fields[i].fieldIndex.getRawIndex() == index){
+            result = fields[i];
             break;
         }
     }
@@ -949,7 +974,7 @@ void KICADLibFootprintLibrary::scan(QString path)
             while (it_fp.hasNext()) {
                 QString name_fp = it_fp.next();
                 QFileInfo fi(name_fp);
-                //+++++++qDebug() << fi.baseName();
+                //qDebug() << fi.baseName();
                 footprintnames.append(fi.baseName());
             }
         }

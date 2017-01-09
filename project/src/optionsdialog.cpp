@@ -14,10 +14,17 @@ OptionsDialog::OptionsDialog(LibCreatorSettings &creatorSettings, QWidget *paren
     ui->edt_source_path->setText( settings.path_sourceLibrary);
     ui->edt_target_path->setText( settings.path_targetLibrary);
 
+    ui->chb_useHashAsDatasheetFilename->setChecked(settings.useHashAsDatasheetFilename);
     if (settings.useFuzzyOctopartQueries){
         ui->rbt_query_fuzzy->setChecked(true);
     }else{
         ui->rbt_query_exact->setChecked(true);
+    }
+
+    if (settings.useAbsolutePathForDatasheetField){
+        ui->rbt_datasheet_absolute->setChecked(true);
+    }else{
+        ui->rbt_datasheet_relative->setChecked(true);
     }
 
 }
@@ -35,5 +42,7 @@ void OptionsDialog::on_buttonBox_accepted()
     settings.path_targetLibrary = ui->edt_target_path->text();
     settings.path_footprintLibrary = ui->edt_footprint_path->text();
     settings.useFuzzyOctopartQueries = ui->rbt_query_fuzzy->isChecked();
+    settings.useAbsolutePathForDatasheetField = ui->rbt_datasheet_absolute->isChecked();
+    settings.useHashAsDatasheetFilename = ui->chb_useHashAsDatasheetFilename->isChecked();
     settings.saveSettings();
 }

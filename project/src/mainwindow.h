@@ -30,9 +30,13 @@ public:
 
     void closeEvent(QCloseEvent *event);
     static QString cleanUpFileNameNode(QString filename, bool allowSeparatorLikeChars);
-    static QString cleanUpFileName(QString filename);
     static void insertStandardVariablesToMap(QMap<QString, QString> &variables, QString footprint, QString reference, QString ruleName, QString mpn,
-                                             QString manufacturer, QString description, QString OctoFootprint);
+                                             QString manufacturer, QString description, QString OctoFootprint, QString OctoFootprintMetric_IPC);
+    QString cleanUpAndJoinFileName(QString filename_root, QString filename_relative);
+    void tableOctopartResult_linkclicked(int row, int column);
+    void openHttpLink(QString url);
+
+
 public slots:
     void setProgressbar(int progress,int total);
 private slots:
@@ -69,6 +73,8 @@ private slots:
 
     void on_actionOptions_triggered();
 
+
+
     void on_tableOctopartResult_cellDoubleClicked(int row, int column);
 
     void on_comboBox_editTextChanged(const QString &arg1);
@@ -84,6 +90,10 @@ private slots:
 
     void showDatasheet();
 
+    void on_actionDesign_settings_triggered();
+
+    void on_lbl_productlink_linkActivated(const QString &link);
+
 private:
     Ui::MainWindow *ui;
 
@@ -98,12 +108,11 @@ private:
     OctopartResult_QueryMPN_Entry selectedOctopartMPN;
     KICADLibSchematicDevice currentSourceDevice;
 
-    KICADLibSchematicDevice targetDevice;
 
     KICADLibSchematicDeviceLibrary currentSourceLib;
     KICADLibFootprintLibrary fpLib;
 
-    void setCurrentDevicePropertiesFromGui();
+
 
     PartCreationRuleList partCreationRuleList;
     void clearQuickLinks(QLayout* layout);
@@ -118,6 +127,7 @@ private:
     QString getDataSheetFileName(bool relativePath);
     QProgressBar *progressbar;
 
+    KICADLibSchematicDevice createDevicePropertiesFromGui(KICADLibSchematicDevice &sourceDevice, QString realDatasheetPath);
 };
 
 #endif // MAINWINDOW_H
